@@ -30,4 +30,6 @@ for d in ~/git/skills/*/; do ln -sfn "$d" ~/.claude/skills/; done
 
 ## 목록
 
-아직 없음.
+| 스킬 | 무엇을 하나 |
+|---|---|
+| [stacked-architecture](stacked-architecture/) | 시스템 구조를 "한 겹씩 쌓아 올리는" 방식으로 소개하는 자료를 만든다. 아무것도 없는 상태에서 시작해 문제 하나마다 부품 하나가 붙고 그 대가를 같이 적는다. 스크롤에 따라 다이어그램이 자라고, 비유 표기와 기술용어 표기를 버튼으로 갈아끼우는 단일 HTML 아티팩트가 나온다 |

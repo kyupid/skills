@@ -1,0 +1,646 @@
+<!--
+  stacked-architecture 뼈대.
+  이 파일을 복사해서 내용만 갈아끼운다. 동작하는 부분(붙박이 다이어그램,
+  스크롤 연동, 새 부품 강조, 눈금, 라이트/다크)은 손대지 않아도 된다.
+
+  갈아끼울 곳:
+    1. <title>            페이지 이름 (짧은 고유명사구)
+    2. :root 토큰          팔레트·활자를 주제에 맞게 다시 고른다. 아래 값은 예시일 뿐이다
+    3. .hero              무엇인지, 왜 쌓아가며 설명하는지
+    4. <svg id="diagram"> 최종 구조 하나를 좌표로 확정하고 각 요소에 data-step 을 붙인다
+    5. <section class="layer">  겹 하나당 하나. data-layer / data-title / data-add 필수
+    6. TERMS (아래 <script>)  비유로 썼다면 기술용어 표기를 같이 낸다. 안 쓰면 버튼이 저절로 숨는다
+
+  규칙:
+    - 겹마다 다른 그림을 그리지 않는다. 좌표계는 하나, 표시/숨김만 다르다.
+    - data-until 은 "이 겹에서 대체됨"을 뜻한다. 배선이 바뀌는 지점에 쓴다.
+    - .layer 의 순서와 svg 의 data-step 번호가 일치해야 한다 (0부터).
+-->
+<title>여기에 페이지 이름</title>
+
+<style>
+  /* ── 토큰: 주제에 맞게 다시 고를 것. 아래는 예시 ─────────────── */
+  :root {
+    --bg: #EFF2F1;
+    --surface: #FAFCFB;
+    --surface-2: #E4EBE9;
+    --ink: #0E1B1D;
+    --ink-2: #46595B;
+    --ink-3: #6E8082;
+    --rule: #CBD6D4;
+    --rule-soft: #DDE5E3;
+    --accent: #0C6B5B;
+    --cost: #8A5A16;
+    --cost-soft: #F0E5D3;
+
+    --serif: "Iowan Old Style", Charter, "Hoefler Text", Palatino, Georgia, serif;
+    --sans: system-ui, -apple-system, "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+  }
+
+  /* 세 상태 모두 처리한다: 미지정(prefers-color-scheme) / 명시 dark / 명시 light */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0B1315; --surface: #101D1F; --surface-2: #172829;
+      --ink: #E2EAE8; --ink-2: #9FB2B0; --ink-3: #7C908E;
+      --rule: #23393B; --rule-soft: #1A2C2E;
+      --accent: #55C4AA; --cost: #D6A160; --cost-soft: #2C2416;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0B1315; --surface: #101D1F; --surface-2: #172829;
+    --ink: #E2EAE8; --ink-2: #9FB2B0; --ink-3: #7C908E;
+    --rule: #23393B; --rule-soft: #1A2C2E;
+    --accent: #55C4AA; --cost: #D6A160; --cost-soft: #2C2416;
+  }
+
+  body {
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    font-size: 17px; line-height: 1.75; -webkit-font-smoothing: antialiased;
+    word-break: keep-all;
+  }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 28px 120px; }
+
+  /* ── 도입부 ──────────────────────────────────────────────── */
+  .hero {
+    display: flex; flex-direction: column; gap: 28px;
+    padding: 92px 0 56px; border-bottom: 1px solid var(--rule);
+  }
+  .wordmark {
+    font-family: var(--serif); font-size: clamp(3.4rem, 11vw, 6rem);
+    line-height: 0.9; letter-spacing: 0.02em; font-weight: 400; margin: 0;
+  }
+  .wordmark span {
+    display: block; font-family: var(--sans);
+    font-size: clamp(1.05rem, 2.6vw, 1.3rem); letter-spacing: 0;
+    font-weight: 700; line-height: 1.4; margin-top: 18px; color: var(--ink);
+  }
+  .hero-lede {
+    max-width: 62ch; font-size: 1.1rem; color: var(--ink-2);
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .hero-lede strong { color: var(--ink); font-weight: 600; }
+  .hero-meta {
+    display: flex; flex-wrap: wrap; gap: 10px 28px; font-family: var(--mono);
+    font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3);
+  }
+
+  /* ── 붙박이 다이어그램 ───────────────────────────────────── */
+  .stage {
+    position: sticky; top: 0; z-index: 5; background: var(--bg);
+    padding: 14px 0 12px; border-bottom: 1px solid var(--rule);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .readout { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; min-height: 28px; }
+  .rd-num {
+    font-family: var(--serif); font-size: 1.5rem; line-height: 1;
+    font-variant-numeric: tabular-nums; color: var(--accent);
+  }
+  .rd-title { font-weight: 700; font-size: 1rem; letter-spacing: -0.01em; }
+  .rd-add { font-family: var(--mono); font-size: 0.74rem; color: var(--ink-3); letter-spacing: 0.04em; }
+  .ticks { display: flex; gap: 3px; margin-left: auto; }
+  .ticks i { width: 14px; height: 4px; background: var(--rule); display: block; }
+  .ticks i.lit { background: var(--accent); }
+
+  .canvas { overflow-x: auto; overflow-y: hidden; }
+  .canvas svg {
+    display: block; width: 100%; height: auto; max-height: 42vh;
+    margin: 0 auto; color: var(--ink-2);
+  }
+
+  .d-box { fill: var(--surface); stroke: currentColor; stroke-width: 1; }
+  .d-name { fill: var(--ink); font-size: 13px; font-family: var(--sans); font-weight: 600; }
+  .d-sub { fill: var(--ink-3); font-size: 10px; font-family: var(--sans); }
+  .d-edge { stroke: currentColor; stroke-width: 1; fill: none; }
+  .d-dot { stroke: currentColor; stroke-width: 1; fill: none; stroke-dasharray: 2 3; }
+  .d-tag { fill: var(--ink-3); font-size: 10px; font-family: var(--mono); }
+  .d-shell { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 4; }
+  .d-shell-label { fill: var(--accent); font-size: 11px; font-family: var(--mono); letter-spacing: 0.08em; }
+
+  /* JS 없으면 전부 펼쳐진 최종 상태로 보인다 */
+  .js [data-step] { opacity: 0; visibility: hidden; transition: opacity 420ms ease; }
+  .js [data-step].on { opacity: 1; visibility: visible; }
+  .js [data-step].fresh .d-box { stroke: var(--accent); stroke-width: 2; }
+  .js [data-step].fresh .d-name { fill: var(--accent); }
+  .js [data-step].fresh .d-edge,
+  .js [data-step].fresh .d-dot { stroke: var(--accent); stroke-width: 1.6; }
+  @media (prefers-reduced-motion: reduce) { .js [data-step] { transition: none; } }
+
+  /* ── 겹 본문 ─────────────────────────────────────────────── */
+  .layer {
+    display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 36px;
+    padding: 64px 0; border-bottom: 1px solid var(--rule-soft);
+  }
+  .layer:last-child { border-bottom: none; }
+  .numeral {
+    font-family: var(--serif); font-size: 2.9rem; line-height: 1;
+    font-variant-numeric: tabular-nums; color: var(--accent);
+    position: sticky; top: 58vh; align-self: start;
+  }
+  .layer-0 .numeral { color: var(--ink-3); }
+
+  .body { display: flex; flex-direction: column; gap: 1.5rem; }
+  .layer h2 {
+    font-size: clamp(1.45rem, 3.2vw, 1.9rem); line-height: 1.3; font-weight: 700;
+    letter-spacing: -0.02em; margin: 0; text-wrap: balance; max-width: 24ch;
+  }
+  .trigger {
+    font-family: var(--serif); font-size: 1.15rem; line-height: 1.6; color: var(--ink-2);
+    border-left: 2px solid var(--accent); padding-left: 18px; max-width: 60ch;
+  }
+  .trigger b {
+    font-family: var(--sans); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em;
+    display: block; color: var(--accent); margin-bottom: 4px;
+  }
+  .body p { margin: 0; max-width: 64ch; }
+  .body ul {
+    margin: 0; padding-left: 0; list-style: none;
+    display: flex; flex-direction: column; gap: 12px; max-width: 64ch;
+  }
+  .body li { padding-left: 22px; position: relative; }
+  .body li::before {
+    content: ""; position: absolute; left: 2px; top: 0.72em;
+    width: 8px; height: 1px; background: var(--accent);
+  }
+  code {
+    font-family: var(--mono); font-size: 0.86em; background: var(--surface-2);
+    padding: 0.1em 0.38em; border-radius: 2px; word-break: break-all;
+  }
+  .cost {
+    background: var(--cost-soft); border-left: 2px solid var(--cost); padding: 16px 20px;
+    max-width: 64ch; display: flex; flex-direction: column; gap: 6px;
+  }
+  .cost b { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em; color: var(--cost); }
+  .cost p { font-size: 0.95rem; color: var(--ink-2); }
+  .source { font-family: var(--mono); font-size: 0.73rem; color: var(--ink-3); }
+
+  /* 숫자를 강조할 때 (사고 규모, 상한값 등) */
+  .figures {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--rule); border: 1px solid var(--rule); max-width: 64ch;
+  }
+  .fig { background: var(--surface); padding: 16px 18px; display: flex; flex-direction: column; gap: 2px; }
+  .fig dt {
+    font-family: var(--mono); font-size: 0.67rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .fig dd {
+    margin: 0; font-family: var(--serif); font-size: 1.55rem; line-height: 1.15;
+    font-variant-numeric: tabular-nums; color: var(--ink);
+  }
+  .fig dd em { font-family: var(--sans); font-style: normal; font-size: 0.8rem; color: var(--ink-2); margin-left: 3px; }
+
+  /* ── 마무리 ──────────────────────────────────────────────── */
+  .section { padding: 72px 0 0; display: flex; flex-direction: column; gap: 26px; }
+  .section > h2 {
+    font-size: clamp(1.55rem, 4vw, 2rem); letter-spacing: -0.02em;
+    font-weight: 700; margin: 0; max-width: 22ch; text-wrap: balance;
+  }
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.71rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  .closing-note { max-width: 62ch; color: var(--ink-2); }
+  .ledger { display: flex; flex-direction: column; border-top: 1px solid var(--rule); }
+  .ledger div {
+    display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 28px;
+    padding: 18px 0; border-bottom: 1px solid var(--rule-soft); align-items: baseline;
+  }
+  .ledger dt { font-weight: 600; font-size: 0.93rem; }
+  .ledger dd { margin: 0; color: var(--ink-2); font-size: 0.97rem; max-width: 58ch; }
+
+  .draft {
+    margin-top: 76px; border: 1px dashed var(--rule); padding: 20px 24px;
+    font-size: 0.88rem; color: var(--ink-3); max-width: 64ch;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .draft b {
+    color: var(--ink-2); font-family: var(--mono); font-size: 0.7rem;
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+
+  /* ── 용어 표기 전환 (비유 / 기술용어) ────────────────────── */
+  .modes {
+    display: flex; margin-left: 14px; align-self: center; flex: none;
+    border: 1px solid var(--rule); background: var(--surface);
+  }
+  .modes button {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.04em;
+    color: var(--ink-3); padding: 4px 11px; line-height: 1.5;
+  }
+  .modes button + button { border-left: 1px solid var(--rule); }
+  .modes button.on { background: var(--accent); color: var(--surface); }
+  .modes button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .modes[hidden] { display: none; }
+
+  /* 본문 안에서 표기가 갈리는 낱말. 겉모습은 주변 글과 같다 */
+  t { font: inherit; color: inherit; }
+
+  a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  @media (max-width: 860px) {
+    body { font-size: 16px; }
+    .wrap { padding: 0 20px 100px; }
+    .layer { grid-template-columns: 1fr; gap: 16px; padding: 48px 0; }
+    .numeral { position: static; font-size: 2.1rem; }
+    .canvas svg { max-height: 34vh; }
+    .rd-add { display: none; }
+    .modes { margin-left: 10px; }
+    .modes button { padding: 4px 9px; font-size: 0.66rem; }
+    .ledger div { grid-template-columns: 1fr; gap: 6px; }
+    .hero { padding: 60px 0 44px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <h1 class="wordmark">이름<span>한 줄 부제. 무엇을 어떻게 쌓아 만들었는지</span></h1>
+    <div class="hero-lede">
+      <p>이 시스템이 무엇인지 두세 문장. 누가 쓰고, 무엇을 대신 해주는지.</p>
+      <p>이 글은 완성된 구조를 한 장에 펼치는 대신 <strong>가장 단순한 상태에서 출발해 한 겹씩 쌓습니다.</strong> 스크롤을 내리면 위쪽 그림에 부품이 하나씩 붙습니다. 각 부품은 앞의 상태로는 감당이 안 되는 문제가 생겨서 붙은 것이고, 붙은 대가도 같이 적었습니다.</p>
+    </div>
+    <div class="hero-meta">
+      <span>언어 · 배포 형태</span>
+      <span>규모 숫자</span>
+      <span>의존 대상</span>
+    </div>
+  </header>
+
+  <div class="build">
+
+    <!-- ============ 붙박이 다이어그램 ============
+         좌표계는 하나. 최종 구조를 다 그려놓고 data-step 으로 등장 시점만 나눈다.
+         data-until="N" 은 N번 겹까지만 보이고 그 다음 겹에서 대체된다는 뜻.
+         viewBox 종횡비는 2.2:1 안팎을 권장. -->
+    <div class="stage">
+      <div class="readout">
+        <span class="rd-num" id="rdNum">00</span>
+        <span class="rd-title" id="rdTitle"></span>
+        <span class="rd-add" id="rdAdd"></span>
+        <span class="ticks" id="ticks" aria-hidden="true"></span>
+        <!-- 비유를 안 썼으면 그냥 두면 된다. 바꿀 것이 없으면 JS 가 숨긴다 -->
+        <span class="modes" id="modes" role="group" aria-label="용어 표기 선택">
+          <button type="button" class="on" data-mode="fig" aria-pressed="true">비유</button>
+          <button type="button" data-mode="tech" aria-pressed="false">기술용어</button>
+        </span>
+      </div>
+
+      <div class="canvas">
+        <svg id="diagram" viewBox="0 0 1110 470" role="img"
+             aria-label="구조가 단계별로 쌓이는 그림. 여기에 최종 상태를 한 문장으로 설명한다.">
+          <defs>
+            <marker id="ar" viewBox="0 0 8 8" refX="7.5" refY="4"
+                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <polygon points="0,0 8,4 0,8" fill="currentColor" />
+            </marker>
+          </defs>
+
+          <!-- 마지막 겹: 전체를 감싸는 경계 (배포 단위, 권한 경계 등) -->
+          <g data-step="9">
+            <rect class="d-shell" x="190" y="58" width="710" height="392" rx="3" />
+            <text class="d-shell-label" x="190" y="48">경계 이름</text>
+          </g>
+
+          <!-- 00 · 아무것도 없는 상태. 중앙 행에 주 흐름을 놓는다 -->
+          <g data-step="0">
+            <rect class="d-box" x="20" y="241" width="150" height="48" rx="2" />
+            <text class="d-name" x="95" y="263" text-anchor="middle">입력</text>
+            <text class="d-sub" x="95" y="278" text-anchor="middle">부제</text>
+
+            <rect class="d-box" x="230" y="241" width="160" height="48" rx="2" />
+            <text class="d-name" x="310" y="263" text-anchor="middle">코어</text>
+            <text class="d-sub" x="310" y="278" text-anchor="middle">부제</text>
+          </g>
+
+          <!-- 00~03 · 직통 연결. 04에서 입구가 바뀌며 사라진다 -->
+          <g data-step="0" data-until="3">
+            <line class="d-edge" x1="174" y1="265" x2="226" y2="265"
+                  marker-start="url(#ar)" marker-end="url(#ar)" />
+            <text class="d-tag" x="200" y="303" text-anchor="middle">주고받음</text>
+          </g>
+
+          <!-- 00 에서만 보이는 실패 주석 -->
+          <g data-step="0" data-until="0">
+            <text class="d-tag" x="310" y="316" text-anchor="middle">이것만으론 안 되는 이유</text>
+          </g>
+
+          <!-- 01 · 첫 부품 + 외부 -->
+          <g data-step="1">
+            <rect class="d-box" x="520" y="241" width="160" height="48" rx="2" />
+            <text class="d-name" x="600" y="263" text-anchor="middle">실행부</text>
+            <text class="d-sub" x="600" y="278" text-anchor="middle">부제</text>
+
+            <rect class="d-box" x="930" y="241" width="160" height="48" rx="2" />
+            <text class="d-name" x="1010" y="263" text-anchor="middle">외부 시스템</text>
+            <text class="d-sub" x="1010" y="278" text-anchor="middle">부제</text>
+
+            <line class="d-edge" x1="394" y1="253" x2="516" y2="253" marker-end="url(#ar)" />
+            <text class="d-tag" x="455" y="245" text-anchor="middle">호출</text>
+          </g>
+
+          <!-- 01~05 · 직통. 06에서 중간 노드가 끼며 대체된다 -->
+          <g data-step="1" data-until="5">
+            <line class="d-edge" x1="684" y1="265" x2="926" y2="265" marker-end="url(#ar)" />
+          </g>
+
+          <!-- 02 · 되돌아오는 선 -->
+          <g data-step="2">
+            <line class="d-edge" x1="516" y1="277" x2="394" y2="277" marker-end="url(#ar)" />
+            <text class="d-tag" x="455" y="292" text-anchor="middle">결과</text>
+          </g>
+
+          <!-- 03 · 아래 행에 매다는 부속 (상한, 계수기 등) -->
+          <g data-step="3">
+            <rect class="d-box" x="400" y="330" width="112" height="36" rx="2" />
+            <text class="d-name" x="456" y="347" text-anchor="middle" style="font-size:12px">부속</text>
+            <text class="d-sub" x="456" y="360" text-anchor="middle">상한값</text>
+            <line class="d-dot" x1="456" y1="326" x2="456" y2="288" />
+          </g>
+
+          <!-- 04 · 입구가 앞으로 옮겨간다 (배선 변화) -->
+          <g data-step="4">
+            <rect class="d-box" x="230" y="94" width="160" height="42" rx="2" />
+            <text class="d-name" x="310" y="113" text-anchor="middle">입구</text>
+            <text class="d-sub" x="310" y="127" text-anchor="middle">부제</text>
+
+            <polyline class="d-edge" points="95,237 95,115 226,115" marker-end="url(#ar)" />
+            <line class="d-edge" x1="226" y1="277" x2="174" y2="277" marker-end="url(#ar)" />
+            <text class="d-tag" x="200" y="303" text-anchor="middle">응답</text>
+          </g>
+
+          <!-- 04~06 · 입구에서 코어로 바로. 07에서 중간 블록이 낀다 -->
+          <g data-step="4" data-until="6">
+            <line class="d-edge" x1="310" y1="140" x2="310" y2="237" marker-end="url(#ar)" />
+          </g>
+
+          <!-- 05 · 옆으로 빼는 저장소 -->
+          <g data-step="5">
+            <rect class="d-box" x="520" y="334" width="160" height="42" rx="2" />
+            <text class="d-name" x="600" y="353" text-anchor="middle">보관소</text>
+            <text class="d-sub" x="600" y="367" text-anchor="middle">부제</text>
+            <line class="d-edge" x1="600" y1="293" x2="600" y2="330" marker-end="url(#ar)" />
+            <text class="d-tag" x="610" y="315">무엇이</text>
+          </g>
+
+          <!-- 06 · 길목에 끼어드는 관문 (배선 변화) -->
+          <g data-step="6">
+            <rect class="d-box" x="745" y="246" width="110" height="38" rx="2" />
+            <text class="d-name" x="800" y="263" text-anchor="middle" style="font-size:12px">관문</text>
+            <text class="d-sub" x="800" y="276" text-anchor="middle">부제</text>
+            <line class="d-edge" x1="684" y1="265" x2="741" y2="265" marker-end="url(#ar)" />
+            <line class="d-edge" x1="859" y1="265" x2="926" y2="265" marker-end="url(#ar)" />
+          </g>
+
+          <!-- 07 · 입구와 코어 사이에 끼는 블록 (배선 변화) -->
+          <g data-step="7">
+            <rect class="d-box" x="230" y="164" width="160" height="42" rx="2" />
+            <text class="d-name" x="310" y="183" text-anchor="middle">중간 블록</text>
+            <text class="d-sub" x="310" y="197" text-anchor="middle">부제</text>
+            <line class="d-edge" x1="310" y1="140" x2="310" y2="160" marker-end="url(#ar)" />
+            <line class="d-edge" x1="310" y1="210" x2="310" y2="237" marker-end="url(#ar)" />
+          </g>
+
+          <!-- 08 · 실패 대비 경로 -->
+          <g data-step="8">
+            <rect class="d-box" x="230" y="334" width="160" height="42" rx="2" />
+            <text class="d-name" x="310" y="353" text-anchor="middle">대비 경로</text>
+            <text class="d-sub" x="310" y="367" text-anchor="middle">부제</text>
+            <line class="d-edge" x1="310" y1="293" x2="310" y2="330" marker-end="url(#ar)" />
+            <text class="d-tag" x="250" y="315" text-anchor="end">실패하면</text>
+          </g>
+
+          <!-- 09 · 경계 안에 딸려 들어가는 자산 -->
+          <g data-step="9">
+            <rect class="d-box" x="620" y="405" width="160" height="40" rx="2" />
+            <text class="d-name" x="700" y="423" text-anchor="middle" style="font-size:12px">내장 자산</text>
+            <text class="d-sub" x="700" y="436" text-anchor="middle">부제</text>
+            <polyline class="d-dot" points="700,401 700,300 688,300" marker-end="url(#ar)" />
+          </g>
+
+          <!-- 10 · 전체에서 걷어오는 선 -->
+          <g data-step="10">
+            <line class="d-dot" x1="310" y1="380" x2="310" y2="392" />
+            <line class="d-dot" x1="600" y1="380" x2="600" y2="392" />
+            <line class="d-dot" x1="310" y1="392" x2="600" y2="392" />
+            <line class="d-dot" x1="456" y1="392" x2="456" y2="401" marker-end="url(#ar)" />
+
+            <rect class="d-box" x="371" y="405" width="170" height="40" rx="2" />
+            <text class="d-name" x="456" y="423" text-anchor="middle" style="font-size:12px">기록</text>
+            <text class="d-sub" x="456" y="436" text-anchor="middle">부제</text>
+
+            <rect class="d-box" x="196" y="405" width="150" height="40" rx="2" />
+            <text class="d-name" x="271" y="423" text-anchor="middle" style="font-size:12px">보는 화면</text>
+            <text class="d-sub" x="271" y="436" text-anchor="middle">부제</text>
+
+            <line class="d-edge" x1="367" y1="425" x2="350" y2="425" marker-end="url(#ar)" />
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- ============ 겹 ============
+         data-layer 는 0부터. svg 의 data-step 과 번호가 맞아야 한다.
+         data-title  읽기창에 뜨는 제목
+         data-add    이번 겹에 무엇이 붙는지 (+ 로 시작) -->
+    <main class="layers">
+
+      <section class="layer layer-0" data-layer="0"
+               data-title="아무것도 못 하는 상태" data-add="아직 아무것도 없음">
+        <div class="numeral">00</div>
+        <div class="body">
+          <h2>아무것도 못 하는 상태</h2>
+          <p class="trigger"><b>출발점</b>부품 하나만 놓았을 때 왜 안 되는지를 구체적인 예로 보인다. 이 실패가 다음 겹의 존재 이유가 된다.</p>
+          <p>본문. 위 그림에 상자가 둘뿐인 이유를 말해주면 그림과 글이 붙는다.</p>
+        </div>
+      </section>
+
+      <section class="layer" data-layer="1"
+               data-title="첫 부품을 붙인다" data-add="+ 실행부 · 외부 시스템">
+        <div class="numeral">01</div>
+        <div class="body">
+          <h2>첫 부품을 붙인다</h2>
+          <p class="trigger"><b>문제</b>앞의 상태로 감당 안 되는 것 한 줄.</p>
+          <p>무엇을 붙였고 어떻게 도는지.</p>
+          <div class="cost">
+            <b>치르는 대가</b>
+            <p>이 선택으로 포기한 것, 지금 아픈 곳. 코드에서 찾은 것만 쓴다. 없으면 아직 덜 본 것이다.</p>
+          </div>
+          <p class="source">경로/파일.go</p>
+        </div>
+      </section>
+
+      <section class="layer" data-layer="2"
+               data-title="다음 겹 제목" data-add="+ 붙는 것">
+        <div class="numeral">02</div>
+        <div class="body">
+          <h2>다음 겹 제목</h2>
+          <p class="trigger"><b>문제</b>...</p>
+          <p>...</p>
+
+          <!-- 사고 규모나 상한값을 강조할 때 -->
+          <dl class="figures">
+            <div class="fig"><dt>라벨</dt><dd>8<em>단위</em></dd></div>
+            <div class="fig"><dt>라벨</dt><dd>40<em>단위</em></dd></div>
+          </dl>
+
+          <div class="cost">
+            <b>치르는 대가</b>
+            <p>...</p>
+          </div>
+          <p class="source">경로/파일.go</p>
+        </div>
+      </section>
+
+      <!-- 겹을 더 추가한다. svg 의 data-step 최대 번호까지 맞출 것 -->
+
+    </main>
+  </div>
+
+  <section class="section">
+    <span class="eyebrow">모아보면</span>
+    <h2>이 구조가 못 하는 일</h2>
+    <p class="closing-note">겹마다 흩어놓은 대가를 한자리에 모으면 이 시스템의 성격이 보인다. 여기서 한 문장으로 요약한다.</p>
+    <dl class="ledger">
+      <div><dt>못 하는 일</dt><dd>왜 못 하는지, 대신 어떻게 하는지.</dd></div>
+      <div><dt>못 하는 일</dt><dd>...</dd></div>
+    </dl>
+  </section>
+
+  <section class="section">
+    <span class="eyebrow">아직 안 끝난 것</span>
+    <h2>다음에 얹을 겹</h2>
+    <dl class="ledger">
+      <div><dt>남은 숙제</dt><dd>측정 못 한 것, 미룬 결정. 정직하게 쓰면 기술 청중에게 신뢰가 는다.</dd></div>
+    </dl>
+  </section>
+
+  <div class="draft">
+    <b>초안 메모</b>
+    <p>수치와 동작의 출처를 밝히고, 외부 공개 가능 범위를 사용자가 확인하게 한다. 발행 전에 지운다.</p>
+  </div>
+
+</div>
+
+<script>
+  (function () {
+    var svg = document.getElementById("diagram");
+    var groups = Array.prototype.slice.call(svg.querySelectorAll("[data-step]"));
+    var sections = Array.prototype.slice.call(document.querySelectorAll(".layer"));
+    var rdNum = document.getElementById("rdNum");
+    var rdTitle = document.getElementById("rdTitle");
+    var rdAdd = document.getElementById("rdAdd");
+    var ticksBox = document.getElementById("ticks");
+
+    document.documentElement.classList.add("js");
+
+    /* ── 용어 표기 전환 ────────────────────────────────────────────
+       기본은 비유 표기. 버튼을 누르면 세 곳이 같이 바뀐다.
+         1) 그림 안의 <text>      아래 TERMS 에 "비유": "기술용어" 로 적는다 (글자가 정확히 같아야 걸린다)
+         2) 읽기창 data-title/add 같은 TERMS 를 거친다
+         3) 본문 낱말             <t data-x="기술용어">비유</t> 로 감싼다
+
+       원칙:
+         - 코드에 있는 이름, 설정 키, 파일명, 실측치는 바꾸지 않는다. <pre> 안 도식도 건드리지 않는다
+         - 한국어는 활용 때문에 낱말만 갈면 문장이 깨진다. 어색해지면 문장 통째로 감싼다
+         - 기술용어 쪽은 비유의 직역이 아니라 그 분야에서 실제로 쓰는 이름을 적는다
+       TERMS 를 비우고 <t> 도 안 쓰면 버튼은 저절로 숨는다. */
+    var TERMS = {
+      // "세션 열쇠": "세션 키 (대칭키)",
+      // "잠긴 레코드": "TLS 레코드 (암호문)",
+      // "내용을 잠근다": "대칭키로 암호화한다"      // 읽기창 data-title 도 같은 사전을 쓴다
+    };
+
+    var mode = "fig";
+    function term(str) {
+      return mode === "tech" && TERMS[str] ? TERMS[str] : str;
+    }
+
+    var modesBox = document.getElementById("modes");
+    var svgTexts = Array.prototype.slice.call(svg.querySelectorAll("text"))
+      .filter(function (el) { return TERMS[el.textContent] !== undefined; });
+    var inline = Array.prototype.slice.call(document.querySelectorAll("t[data-x]"));
+    svgTexts.concat(inline).forEach(function (el) {
+      el.setAttribute("data-fig", el.textContent);   // 처음 값이 비유 표기
+    });
+
+    function applyMode() {
+      svgTexts.forEach(function (el) { el.textContent = term(el.getAttribute("data-fig")); });
+      inline.forEach(function (el) {
+        el.textContent = mode === "tech" ? el.getAttribute("data-x") : el.getAttribute("data-fig");
+      });
+    }
+
+    if (!svgTexts.length && !inline.length && !Object.keys(TERMS).length) {
+      modesBox.hidden = true;
+    } else {
+      Array.prototype.slice.call(modesBox.querySelectorAll("button")).forEach(function (btn, _, btns) {
+        btn.addEventListener("click", function () {
+          if (btn.getAttribute("data-mode") === mode) return;
+          mode = btn.getAttribute("data-mode");
+          btns.forEach(function (b) {
+            var on = b.getAttribute("data-mode") === mode;
+            b.classList.toggle("on", on);
+            b.setAttribute("aria-pressed", on ? "true" : "false");
+          });
+          applyMode();
+          var step = current;
+          current = -1;      // 읽기창을 다시 그리게 한다
+          render(step);
+        });
+      });
+    }
+
+    for (var i = 0; i < sections.length; i++) ticksBox.appendChild(document.createElement("i"));
+    var ticks = Array.prototype.slice.call(ticksBox.children);
+
+    var current = -1;
+
+    function render(step) {
+      if (step === current) return;
+      var prev = current;
+      current = step;
+
+      groups.forEach(function (g) {
+        var from = parseInt(g.getAttribute("data-step"), 10);
+        var untilAttr = g.getAttribute("data-until");
+        var until = untilAttr === null ? Infinity : parseInt(untilAttr, 10);
+        var visible = step >= from && step <= until;
+        g.classList.toggle("on", visible);
+        // 이번에 새로 붙은 것만 강조. 위로 스크롤할 때는 강조하지 않는다.
+        g.classList.toggle("fresh", visible && from === step && step > prev);
+      });
+
+      ticks.forEach(function (t, i) { t.classList.toggle("lit", i <= step); });
+
+      var sec = sections[step];
+      rdNum.textContent = String(sec.getAttribute("data-layer")).padStart(2, "0");
+      rdTitle.textContent = term(sec.getAttribute("data-title"));
+      rdAdd.textContent = term(sec.getAttribute("data-add"));
+    }
+
+    // 화면 58% 지점을 지난 마지막 섹션이 현재 겹
+    function pick() {
+      var line = window.innerHeight * 0.58;
+      var step = 0;
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].getBoundingClientRect().top <= line) step = i;
+      }
+      render(step);
+    }
+
+    var queued = false;
+    function onScroll() {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; pick(); });
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    render(0);
+    pick();
+  })();
+</script>
