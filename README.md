@@ -1,8 +1,8 @@
 # skills
 
-[Claude Code](https://claude.com/claude-code) 스킬 모음.
+작업 방식을 글로 적어둔 스킬 모음.
 
-스킬 하나는 디렉토리 하나다. 안에 `SKILL.md` 가 있고, 필요하면 템플릿·스크립트를 같이 둔다.
+스킬 하나는 "이런 상황이면 이렇게 한다"를 적은 문서 한 장이다. 사람이 읽어도 되고, 코딩 에이전트에게 읽혀도 된다. 매번 같은 설명을 다시 하지 않으려고 모아둔다.
 
 ```
 skills/
@@ -11,22 +11,25 @@ skills/
     template.html   # (선택) 스킬이 쓰는 파일
 ```
 
+`SKILL.md` 는 YAML 프론트매터에 `name` 과 `description` 을 두고 본문에 절차를 적는 형식이다. Anthropic 이 정한 [Agent Skills](https://code.claude.com/docs/en/skills) 규격을 따르지만, 특별한 게 없는 마크다운이라 다른 도구에 붙이거나 그냥 읽어도 된다.
+
 ## 쓰는 법
 
-이 저장소를 클론하고, 쓰고 싶은 스킬만 `~/.claude/skills/` 로 링크한다.
+클론해서 원하는 스킬만 도구가 보는 자리에 링크한다.
 
 ```bash
 git clone git@github.com:kyupid/skills.git ~/git/skills
-ln -s ~/git/skills/<skill-name> ~/.claude/skills/<skill-name>
 ```
 
-전부 쓰려면 저장소째로 링크해도 된다.
+Claude Code 라면 `~/.claude/skills/` 다.
 
 ```bash
+ln -s ~/git/skills/<skill-name> ~/.claude/skills/<skill-name>
+# 전부 쓰려면
 for d in ~/git/skills/*/; do ln -sfn "$d" ~/.claude/skills/; done
 ```
 
-`description` 에 적힌 상황이 오면 Claude 가 알아서 불러 쓰고, `/<skill-name>` 으로 직접 부를 수도 있다.
+다른 에이전트를 쓴다면 그 도구가 읽는 경로에 같은 식으로 걸거나, `SKILL.md` 를 프롬프트에 그대로 붙여 넣어도 된다.
 
 ## 목록
 
